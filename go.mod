@@ -1,4 +1,4 @@
-module github.com/remind101/assume-role
+module github.com/ksin751119/assume-role
 
 go 1.25
 

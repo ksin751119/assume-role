@@ -1,24 +1,37 @@
 This tool will request and set temporary credentials in your shell environment variables for a given role.
 
+## Requirements
+
+- Go 1.25+
+- AWS credentials configured in `~/.aws/credentials`
+
 ## Installation
 
-On OS X, the best way to get it is to use homebrew:
+### Using Go Install (Recommended)
+
+```bash
+go install github.com/ksin751119/assume-role@latest
+```
+
+### Building from Source
+
+```bash
+git clone https://github.com/ksin751119/assume-role.git
+cd assume-role
+go build -o bin/assume-role .
+```
+
+### Using Homebrew (macOS)
 
 ```bash
 brew install remind101/formulae/assume-role
 ```
 
-If you have a working Go 1.25+ environment:
-
-```bash
-$ go get -u github.com/remind101/assume-role
-```
-
-On Windows with PowerShell, you can use [scoop.sh](http://scoop.sh/)
+### Using Scoop (Windows)
 
 ```cmd
-$ scoop bucket add extras
-$ scoop install assume-role
+scoop bucket add extras
+scoop install assume-role
 ```
 
 ## Configuration
@@ -71,6 +84,19 @@ The `assume-role` tool helps a user authenticate (using their keys) and then ass
 
 ## Usage
 
+```
+assume-role [options] <role> [<command> <args...>]
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-duration` | `1h` | The duration that the credentials will be valid for (e.g., `30m`, `2h`) |
+| `-format` | `bash` | Output format: `bash`, `fish`, or `powershell` |
+
+### Examples
+
 Perform an action as the given IAM role:
 
 ```bash
@@ -110,7 +136,35 @@ $env:ASSUMED_ROLE="prod"
 # assume-role.exe prod | Invoke-Expression
 ```
 
-If you use `eval $(assume-role)` frequently, you may want to create a alias for it:
+### Using with custom duration
+
+Request credentials valid for 2 hours:
+
+```bash
+$ assume-role -duration 2h prod aws s3 ls
+```
+
+### Using with different shell formats
+
+For fish shell:
+```bash
+$ assume-role -format fish prod
+set -gx AWS_ACCESS_KEY_ID "ASIAI....UOCA";
+set -gx AWS_SECRET_ACCESS_KEY "DuH...G1d";
+...
+```
+
+### Using with Role ARN directly
+
+You can also specify a role ARN directly instead of a profile name:
+
+```bash
+$ assume-role arn:aws:iam::123456789012:role/MyRole aws sts get-caller-identity
+```
+
+### Shell Aliases
+
+If you use `eval $(assume-role)` frequently, you may want to create an alias for it:
 
 * zsh
 ```shell
@@ -120,6 +174,34 @@ alias assume-role='function(){eval $(command assume-role $@);}'
 ```shell
 function assume-role { eval $( $(which assume-role) $@); }
 ```
+* fish
+```shell
+function assume-role
+    eval (command assume-role -format fish $argv)
+end
+```
+
+## Development
+
+### Build
+
+```bash
+# Build for current platform
+go build -o bin/assume-role .
+
+# Build for all platforms (Linux, macOS, Windows)
+make bin
+
+# Run tests
+make test
+```
+
+### Project Structure
+
+This project uses:
+- **Go 1.25** with Go Modules
+- **AWS SDK for Go v2** for AWS API interactions
+- **gopkg.in/yaml.v3** for YAML parsing
 
 ## TODO
 

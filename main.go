@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"al.essio.dev/pkg/shellescape"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -51,19 +52,39 @@ func defaultFormat() string {
 	}
 }
 
+const maxDuration = 12 * time.Hour
+
 func main() {
+	// Validate HOME environment variable
+	if os.Getenv("HOME") == "" {
+		fmt.Fprintf(os.Stderr, "error: HOME environment variable is not set\n")
+		os.Exit(1)
+	}
+
 	var (
 		duration = flag.Duration("duration", time.Hour, "The duration that the credentials will be valid for.")
 		format   = flag.String("format", defaultFormat(), "Format can be 'bash' or 'powershell'.")
 	)
 	flag.Parse()
+
+	// Validate duration
+	if *duration > maxDuration {
+		fmt.Fprintf(os.Stderr, "error: duration cannot exceed 12 hours\n")
+		os.Exit(1)
+	}
+	if *duration < time.Minute {
+		fmt.Fprintf(os.Stderr, "error: duration must be at least 1 minute\n")
+		os.Exit(1)
+	}
+
 	argv := flag.Args()
 	if len(argv) < 1 {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	role := argv[0]
 	args := argv[1:]
@@ -131,11 +152,11 @@ func execWithCredentials(role string, argv []string, creds *aws.Credentials) err
 // printCredentials prints the credentials in a way that can easily be sourced
 // with bash.
 func printCredentials(role string, creds *aws.Credentials) {
-	fmt.Printf("export AWS_ACCESS_KEY_ID=\"%s\"\n", creds.AccessKeyID)
-	fmt.Printf("export AWS_SECRET_ACCESS_KEY=\"%s\"\n", creds.SecretAccessKey)
-	fmt.Printf("export AWS_SESSION_TOKEN=\"%s\"\n", creds.SessionToken)
-	fmt.Printf("export AWS_SECURITY_TOKEN=\"%s\"\n", creds.SessionToken)
-	fmt.Printf("export ASSUMED_ROLE=\"%s\"\n", role)
+	fmt.Printf("export AWS_ACCESS_KEY_ID=%s\n", shellescape.Quote(creds.AccessKeyID))
+	fmt.Printf("export AWS_SECRET_ACCESS_KEY=%s\n", shellescape.Quote(creds.SecretAccessKey))
+	fmt.Printf("export AWS_SESSION_TOKEN=%s\n", shellescape.Quote(creds.SessionToken))
+	fmt.Printf("export AWS_SECURITY_TOKEN=%s\n", shellescape.Quote(creds.SessionToken))
+	fmt.Printf("export ASSUMED_ROLE=%s\n", shellescape.Quote(role))
 	fmt.Printf("# Run this to configure your shell:\n")
 	fmt.Printf("# eval $(%s)\n", strings.Join(os.Args, " "))
 }
@@ -143,11 +164,11 @@ func printCredentials(role string, creds *aws.Credentials) {
 // printFishCredentials prints the credentials in a way that can easily be sourced
 // with fish.
 func printFishCredentials(role string, creds *aws.Credentials) {
-	fmt.Printf("set -gx AWS_ACCESS_KEY_ID \"%s\";\n", creds.AccessKeyID)
-	fmt.Printf("set -gx AWS_SECRET_ACCESS_KEY \"%s\";\n", creds.SecretAccessKey)
-	fmt.Printf("set -gx AWS_SESSION_TOKEN \"%s\";\n", creds.SessionToken)
-	fmt.Printf("set -gx AWS_SECURITY_TOKEN \"%s\";\n", creds.SessionToken)
-	fmt.Printf("set -gx ASSUMED_ROLE \"%s\";\n", role)
+	fmt.Printf("set -gx AWS_ACCESS_KEY_ID %s;\n", shellescape.Quote(creds.AccessKeyID))
+	fmt.Printf("set -gx AWS_SECRET_ACCESS_KEY %s;\n", shellescape.Quote(creds.SecretAccessKey))
+	fmt.Printf("set -gx AWS_SESSION_TOKEN %s;\n", shellescape.Quote(creds.SessionToken))
+	fmt.Printf("set -gx AWS_SECURITY_TOKEN %s;\n", shellescape.Quote(creds.SessionToken))
+	fmt.Printf("set -gx ASSUMED_ROLE %s;\n", shellescape.Quote(role))
 	fmt.Printf("# Run this to configure your shell:\n")
 	fmt.Printf("# eval (%s)\n", strings.Join(os.Args, " "))
 }
@@ -155,13 +176,20 @@ func printFishCredentials(role string, creds *aws.Credentials) {
 // printPowerShellCredentials prints the credentials in a way that can easily be sourced
 // with Windows powershell using Invoke-Expression.
 func printPowerShellCredentials(role string, creds *aws.Credentials) {
-	fmt.Printf("$env:AWS_ACCESS_KEY_ID=\"%s\"\n", creds.AccessKeyID)
-	fmt.Printf("$env:AWS_SECRET_ACCESS_KEY=\"%s\"\n", creds.SecretAccessKey)
-	fmt.Printf("$env:AWS_SESSION_TOKEN=\"%s\"\n", creds.SessionToken)
-	fmt.Printf("$env:AWS_SECURITY_TOKEN=\"%s\"\n", creds.SessionToken)
-	fmt.Printf("$env:ASSUMED_ROLE=\"%s\"\n", role)
+	// PowerShell uses single quotes for literal strings (no variable expansion)
+	fmt.Printf("$env:AWS_ACCESS_KEY_ID='%s'\n", escapePowerShellString(creds.AccessKeyID))
+	fmt.Printf("$env:AWS_SECRET_ACCESS_KEY='%s'\n", escapePowerShellString(creds.SecretAccessKey))
+	fmt.Printf("$env:AWS_SESSION_TOKEN='%s'\n", escapePowerShellString(creds.SessionToken))
+	fmt.Printf("$env:AWS_SECURITY_TOKEN='%s'\n", escapePowerShellString(creds.SessionToken))
+	fmt.Printf("$env:ASSUMED_ROLE='%s'\n", escapePowerShellString(role))
 	fmt.Printf("# Run this to configure your shell:\n")
 	fmt.Printf("# %s | Invoke-Expression \n", strings.Join(os.Args, " "))
+}
+
+// escapePowerShellString escapes a string for use in PowerShell single-quoted strings.
+// In PowerShell single-quoted strings, only single quotes need to be escaped (doubled).
+func escapePowerShellString(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
 }
 
 // assumeProfile assumes the named profile which must exist in ~/.aws/config

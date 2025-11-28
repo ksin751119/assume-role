@@ -77,7 +77,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "WARNING: using deprecated role file (%s), switch to config file"+
 			" (https://docs.aws.amazon.com/cli/latest/userguide/cli-roles.html)\n",
 			configFilePath)
-		cfg, err := loadConfig()
+		var cfg roleConfigMap
+		cfg, err = loadConfig()
 		must(err)
 
 		roleCfg, ok := cfg[role]
@@ -87,7 +88,7 @@ func main() {
 
 		creds, err = assumeRole(ctx, roleCfg.Role, roleCfg.MFA, *duration)
 	} else {
-		creds, err = assumeProfile(ctx, role)
+		creds, err = assumeProfile(ctx, role, *duration)
 	}
 
 	must(err)
@@ -166,13 +167,14 @@ func printPowerShellCredentials(role string, creds *aws.Credentials) {
 // assumeProfile assumes the named profile which must exist in ~/.aws/config
 // (https://docs.aws.amazon.com/cli/latest/userguide/cli-roles.html) and returns the temporary STS
 // credentials.
-func assumeProfile(ctx context.Context, profile string) (*aws.Credentials, error) {
+func assumeProfile(ctx context.Context, profile string, duration time.Duration) (*aws.Credentials, error) {
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithSharedConfigProfile(profile),
 		config.WithAssumeRoleCredentialOptions(func(o *stscreds.AssumeRoleOptions) {
 			o.TokenProvider = func() (string, error) {
 				return readTokenCode()
 			}
+			o.Duration = duration
 		}),
 	)
 	if err != nil {

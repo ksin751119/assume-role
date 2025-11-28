@@ -21,63 +21,53 @@ cd assume-role
 go build -o bin/assume-role .
 ```
 
-### Using Homebrew (macOS)
-
-```bash
-brew install remind101/formulae/assume-role
-```
-
-### Using Scoop (Windows)
-
-```cmd
-scoop bucket add extras
-scoop install assume-role
-```
-
 ## Configuration
 
 Setup a profile for each role you would like to assume in `~/.aws/config`.
+
+**Important:** For profiles that use `role_arn` (assume role), you **must** use the `[profile <name>]` format. This is required by AWS SDK v2.
 
 For example:
 
 `~/.aws/config`:
 
 ```ini
-[profile usermgt]
-region = us-east-1
+[default]
+region = {your_region}
 
 [profile stage]
-# Stage AWS Account.
-region = us-east-1
-role_arn = arn:aws:iam::1234:role/SuperUser
-source_profile = usermgt
+# Stage AWS Account - uses [profile ...] format because it has role_arn
+region = {your_region}
+role_arn = arn:aws:iam::{stage_account_id}:role/{role_name}
+source_profile = default
 
 [profile prod]
-# Production AWS Account.
-region = us-east-1
-role_arn = arn:aws:iam::9012:role/SuperUser
-mfa_serial = arn:aws:iam::5678:mfa/eric-holmes
-source_profile = usermgt
+# Production AWS Account - with MFA
+region = {your_region}
+role_arn = arn:aws:iam::{prod_account_id}:role/{role_name}
+mfa_serial = arn:aws:iam::{mfa_account_id}:mfa/{your_username}
+source_profile = default
 ```
 
 `~/.aws/credentials`:
 
 ```ini
-[usermgt]
-aws_access_key_id = AKIMYFAKEEXAMPLE
-aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/MYxFAKEYEXAMPLEKEY
+[default]
+aws_access_key_id = {your_access_key_id}
+aws_secret_access_key = {your_secret_access_key}
 ```
+
+> **Note:** The `[default]` profile does not need the `profile` prefix, but all other profiles with `role_arn` must use `[profile <name>]` format.
 
 Reference: https://docs.aws.amazon.com/cli/latest/userguide/cli-roles.html
 
 In this example, we have three AWS Account profiles:
 
- * usermgt
- * stage
- * prod
+ * default - base credentials
+ * stage - assumes SuperUser role in stage account
+ * prod - assumes SuperUser role in prod account (with MFA)
 
-Each member of the org has their own IAM user and access/secret key for the `usermgt` AWS Account.
-The keys are stored in the `~/.aws/credentials` file.
+Each member of the org has their own IAM user and access/secret key stored in `~/.aws/credentials`.
 
 The `stage` and `prod` AWS Accounts have an IAM role named `SuperUser`.
 The `assume-role` tool helps a user authenticate (using their keys) and then assume the privilege of the `SuperUser` role, even across AWS accounts!

@@ -16,4 +16,4 @@ clean:
 	rm -rf bin/*
 
 test:
-	go test -race $(shell go list ./... | grep -v /vendor/)
+	go test -race ./...
